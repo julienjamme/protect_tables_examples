@@ -1,0 +1,566 @@
+---
+title: "Handling non-nested hierarchies with `rtauargus`"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "Z:/SDC/OutilsConfidentialite/protect_tables_examples/")
+library(flexdashboard)
+library(dplyr)
+library(rtauargus)
+options(
+  rtauargus.tauargus_exe =
+    "Y:/Logiciels/TauArgus/TauArgus4.2.3/TauArgus.exe"
+    # "C:/Users/tmm7an/Documents/SDC/TauArgus/TauArgus4.2.3/TauArgus.exe"
+)
+# library(data.table)
+# library(ggraph)
+# library(igraph)
+library(flextable)
+library(collapsibleTree)
+load("data/turnover_act_size.rda")
+load("data/turnover_act_cj.rda")
+load("data/activity_corr_table.rda")
+table_1 <- turnover_act_size
+table_2 <- turnover_act_cj
+hier_main <- activity_corr_table %>% 
+  filter(!A21 %in% c("U","V","W","X","Y","Z")) %>% 
+  filter(substr(A88,2,2) != "X")
+hier_alt <- hier_main %>%
+  filter(A21 %in% LETTERS[4:13]) %>%
+  mutate(A10 = "D_TO_M") %>%
+  unique()
+```
+
+
+
+Overview
+=====================================
+
+Row {data-height=200}
+-----------------------------------------------------------------------
+
+### **The release**
+
+We'd like to release two tables:  
+
+1. The turnover of companies broken down by their `ACTIVITY` (business sector) and their `SIZE`.  
+2. The turnover of companies broken down by their `ACTIVITY` (business sector) and their `CJ` (legal category).  
+
+The `ACTIVITY` variable is broken down into three levels of the NACE (or equivalent) hierarchy.
+But, we'd like also to publish an additional aggregation: th sum of the D to M levels of the NACE. 
+We call it `D_TO_M`.
+
+### **Confidentiality rules**
+
+- *frequency rule* threshold = 3  
+- *dominance rule* (1,85%)  
+- *Interval protection level* = 10%  
+- *singleton rule*
+
+
+Row {data-height=800}<!-- Row {.tabset .tabset-fade data-height=800} -->
+-----------------------------------------------------------------------
+
+### **TABLE 1**
+
+```{r}
+DT::datatable(
+  table_1,
+  rownames = FALSE,  
+  options = list(
+    dom = 'tp',scrollY=FALSE,pageLength=15
+  )
+) %>% 
+  DT::formatRound(3:5, digits=0, dec.mark = ".", mark = " ")
+```
+
+
+### **TABLE 2**
+
+```{r}
+DT::datatable(
+  table_2,
+  rownames = FALSE, 
+  options = list(dom = 'tp',scrollY=FALSE,pageLength=15)
+) %>% 
+  DT::formatRound(3:5, digits=0, dec.mark = ".", mark = " ")
+```
+
+
+Hierarchies
+=====================================
+
+Row
+-----------------------------------------------------------------------
+
+### **Activity: the main hierarchy**
+
+```{r}
+hier_main_long <- tibble(
+  root = "Total", leaf = hier_main$A10 %>% unique(), level = 1
+) %>% 
+  bind_rows(
+    hier_main %>%
+      select(root = A10, leaf = A21) %>% 
+      unique() %>% 
+      mutate(level = 2)
+  ) %>% 
+  bind_rows(
+    hier_main %>% 
+      select(root = A21, leaf = A88) %>% 
+      unique() %>% 
+      mutate(level = 3)
+  )
+```
+
+
+```{r}
+collapsibleTree(hier_main, c("A10", "A21", "A88"), root = "Total")
+```
+
+
+### Activity: an alternative hierarchy
+
+```{r}
+collapsibleTree(hier_alt, c("A21", "A88"), root = "D_to_M", fill = "steelblue")
+```
+
+
+Building the list of tables
+=====================================
+
+Row {data-height=350}
+-----------------------------------------------------------------------
+
+### **Analysis**
+
+1. The two original tables share some common cells on the margins of, respectively, `SIZE` and `CJ` levels. So, they can't be protected independently.  
+
+2. Adding the `D_TO_M` total introduces a non-nested hierarchy issue
+
+$\Rightarrow$ We need to split each original table into two tables:
+
+a. `table_1` = `ACTIVITY` $\times$ `SIZE` with the levels of the main `ACTIVITY` hierarchy
+b. `table_1_alt` = `ACTIVITY` $\times$ `SIZE` with the levels of the alternative `D_TO_M` hierarchy
+c. `table_2` = `ACTIVITY` $\times$ `SIZE` with the levels of the main `ACTIVITY` hierarchy
+d. `table_2_alt` = `ACTIVITY` $\times$ `SIZE` with the levels of the alternative `D_TO_M` hierarchy
+
+$\Rightarrow$ The protection has to be done on these four tables.
+
+Row  {data-height=650}
+-----------------------------------------------------------------------
+
+### **TABLES 1**
+
+```{r}
+table_1_alt <- table_1 %>%
+  filter(
+    ACTIVITY %in% LETTERS[4:13]
+  ) %>%
+  bind_rows(
+    table_1 %>%
+      filter(
+        ACTIVITY %in% LETTERS[4:13]
+      ) %>%
+      group_by(SIZE) %>%
+      summarise(N_OBS = sum(N_OBS), TOT = sum(TOT), MAX = max(MAX)) %>%
+      mutate(ACTIVITY = "D_TO_M")
+  )
+```
+
+#### **`ACTIVITY` levels in `table_1`**
+
+```{r}
+table_1 %>% pull(ACTIVITY) %>% unique()
+```
+
+#### **`ACTIVITY` levels in `table_1_alt`**
+
+```{r}
+table_1_alt %>% pull(ACTIVITY) %>% unique()
+```
+
+
+### **TABLES 2**
+
+```{r}
+table_2_alt <- table_2 %>%
+  filter(
+    ACTIVITY %in% LETTERS[4:13]
+  ) %>%
+  bind_rows(
+    table_2 %>%
+      filter(
+        ACTIVITY %in% LETTERS[4:13]
+      ) %>%
+      group_by(CJ) %>%
+      summarise(N_OBS = sum(N_OBS), TOT = sum(TOT), MAX = max(MAX)) %>%
+      mutate(ACTIVITY = "D_TO_M")
+  )
+# str(table_2_alt)
+```
+
+
+#### **`ACTIVITY` levels in `table_2`**
+
+```{r}
+table_2 %>% pull(ACTIVITY) %>% unique()
+```
+
+#### **`ACTIVITY` levels in `table_2_alt`**
+
+```{r}
+table_2_alt %>% pull(ACTIVITY) %>% unique()
+```
+
+
+Preparation of the data
+=====================================
+
+Row
+-----------------------------------------------------------------------
+
+### **Preparation of hrc files**
+
+The `rtauargus::write_hrc2()` function converts a correspondence table into a 
+proper `.hrc` file.
+
+```{r echo=TRUE}
+hrc_main <-  hier_main %>%
+  write_hrc2(file_name = "hrc/hrc_main")
+
+hrc_alt <- hier_alt %>%
+  select(A21) %>%
+  unique() %>% 
+  write_hrc2(file_name = "hrc/hrc_alt")
+```
+
+The structure of the input is the following one:
+
+```{r}
+hier_main %>% str()
+```
+
+
+The produced `.hrc` file is then:
+
+```{r}
+read.table(hrc_main) %>% select(` `=V1)
+```
+
+
+### **Preparation of the list of tables to protect**
+
+All the tables have to be included in a named list. We also have to detect cells 
+that don't respect the primary rules (frequency and dominance rules). For this purpose, 
+we create a boolean variable (`is_secret_prim`) that takes `TRUE` if a cell doesn't respect a primary secret rule and then has to be suppress.
+
+```{r echo=TRUE}
+
+list_tables <- 
+  # Create the list with our four tables
+  list(
+    t1 = table_1,
+    t1_alt = table_1_alt,
+    t2 = table_2,
+    t2_alt = table_2_alt
+  ) %>%
+  # apply detection of primary cells in every table
+  purrr::map(
+    \(df){
+      df %>%
+        mutate(
+          #frequency rule
+          is_secret_freq = N_OBS > 0 & N_OBS < 3,
+          #dominance rule
+          is_secret_dom = ifelse(MAX == 0, FALSE, MAX/TOT>0.85),
+          #primary status
+          is_secret_prim = is_secret_freq | is_secret_dom
+        )
+    }
+  )
+```
+
+The structure of the tables is then:
+
+```{r}
+str(list_tables)
+```
+
+
+
+Implementation with `rtauargus`
+=====================================
+
+Row 
+-----------------------------------------------------------------------
+
+### **Code** 
+
+
+```{r echo=TRUE, eval=FALSE}
+res <- tab_multi_manager(
+    # The list of tables to protect 
+    list_tables = list_tables,
+    # The explanatory vars of each table of the list
+    list_explanatory_vars = 
+      purrr::map(list_tables, \(df) df %>%  select(1:2) %>% names()),
+    # The hrc file of each hierarchical variable
+    hrc = c(ACTIVITY = hrc_main),
+    # In case of alternative hierarchies in a given table: mention them in alt_hrc
+    alt_hrc = list(
+      t1_alt = c(ACTIVITY = hrc_alt), t2_alt = c(ACTIVITY = hrc_alt)
+    ),
+    # The directory where to save the tau-argus files
+    dir_name = "outputs/",
+    # response variable
+    value = "TOT",
+    # frequency variable
+    freq = "N_OBS",
+    # var indicating the primary secret satus
+    secret_var = "is_secret_prim",
+    # total code for each variable
+    totcode =  "Total",
+    # In case of alternative totals in a given table, mention them in alt-totcode
+    alt_totcode = list(
+      t1_alt = c(ACTIVITY = "D_TO_M"), t2_alt = c(ACTIVITY = "D_TO_M")
+    )
+  )
+```
+
+
+
+### **Outputs**
+
+```{r}
+shiny::actionButton(
+  "launch",
+  label = "Launch protection"
+)
+```
+
+```{r}
+protect_res <- eventReactive(input$launch, {
+  
+  res <- tab_multi_manager(
+    # The list of tables to protect 
+    list_tables = list_tables,
+    # The explanatory vars of each table of the list
+    list_explanatory_vars = 
+      purrr::map(list_tables, \(df) df %>%  select(1:2) %>% names()),
+    # The hrc file of each hierarchical variable
+    hrc = c(ACTIVITY = hrc_main),
+    # In case of alternative hierarchies in a given table: mention them in alt_hrc
+    alt_hrc = list(
+      t1_alt = c(ACTIVITY = hrc_alt), t2_alt = c(ACTIVITY = hrc_alt)
+    ),
+    # The directory where to save the tau-argus files
+    dir_name = "outputs/",
+    # response variable
+    value = "TOT",
+    # frequency variable
+    freq = "N_OBS",
+    # var indicating the primary secret satus
+    secret_var = "is_secret_prim",
+    # total code for each variable
+    totcode =  "Total",
+    # In case of alternative totals in a given table, mention them in alt-totcode
+    alt_totcode = list(
+      t1_alt = c(ACTIVITY = "D_TO_M"), t2_alt = c(ACTIVITY = "D_TO_M")
+    )
+  )
+  
+})
+
+summary_res <- reactive({
+  
+  protect_res() %>% 
+    purrr::imap_dfr(
+      function(df, name){
+        df %>% 
+          rename_with(~"is_secret_final", last_col()) %>% 
+          mutate(final_status = case_when(
+          is_secret_freq ~ "freq",
+          is_secret_dom ~ "dom",
+          is_secret_final ~ "sec.",
+          TRUE ~ "Valid"
+        )) %>% 
+          group_by(final_status) %>% 
+          summarise(
+            n_cells = n(),
+            val_cells = sum(TOT),
+            .groups = "drop"
+          ) %>% 
+          mutate(pc_nb_cells = n_cells/sum(n_cells)*100,
+                 pc_val_cells = val_cells/sum(val_cells)*100) %>% 
+          mutate(table = name) %>% 
+          select(table, final_status, n_cells, pc_nb_cells, val_cells, pc_val_cells)
+      }
+    )
+  
+})
+```
+
+```{r}
+shiny::renderPrint({
+  a <- protect_res()
+})
+```
+
+
+```{r}
+loc_journal <- file.path(getwd(), "outputs/journal.txt")
+```
+
+
+All the files have been recorded within the directory mentionned in the `dir_name` argument.
+A journal, indicating all the steps of the protection process, is also written. This journal isn't
+very easy to use in the case of big tables.
+
+
+### **Summary**
+
+
+```{r}
+renderUI({
+  options(digits=1)
+  summary_res() %>%
+    select(-val_cells) %>% 
+    flextable() %>%
+    colformat_int(
+      big.mark = " ",
+      na_str = "na") %>% 
+    colformat_num(
+      j=4:5,big.mark = " ",dec.mark=".", digits = 2, na_str = "na"
+    ) %>% 
+    theme_booktabs() %>%
+    autofit() %>%
+    htmltools_value()
+})
+```
+
+
+Control of coherence
+=====================================
+
+### Confusion Matrix 1
+
+
+```{r}
+conf_matrices <- reactive({
+  
+  mat1 <- protect_res()$t1 %>% 
+    select(1,2,is_secret_1 = last_col()) %>% 
+    inner_join(
+      protect_res()$t1_alt %>% 
+    select(1,2,is_secret_1_alt = last_col())
+    ) %>% 
+    group_by(is_secret_1, is_secret_1_alt) %>% 
+    count() %>% 
+    tidyr::pivot_wider(names_from=is_secret_1_alt, values_from=n, values_fill = 0)
+  
+  mat2 <- protect_res()$t2 %>% 
+    select(1,2,is_secret_2 = last_col()) %>% 
+    inner_join(
+      protect_res()$t2_alt %>% 
+    select(1,2,is_secret_2_alt = last_col())
+    )%>% 
+    group_by(is_secret_2, is_secret_2_alt) %>% 
+    count() %>% 
+    tidyr::pivot_wider(names_from=is_secret_2_alt, values_from=n, values_fill = 0)
+  
+  mat3 <- protect_res()$t1 %>% 
+    filter(SIZE == "Total") %>% 
+    select(1,is_secret_1 = last_col()) %>% 
+    inner_join(
+      protect_res()$t2 %>% 
+        filter(CJ == "Total") %>% 
+    select(1,is_secret_2 = last_col())
+    ) %>% 
+    group_by(is_secret_1, is_secret_2) %>% 
+    count() %>% 
+    tidyr::pivot_wider(names_from=is_secret_2, values_from=n, values_fill = 0)
+  
+  return(list(mat1,mat2, mat3))
+})
+```
+
+
+The confusion matrix below compares the final status (suppressed or not) of the common cells of
+`table_1` and `table_1_alt`.
+
+```{r}
+renderUI({
+  options(digits=1)
+  conf_matrices()[[1]] %>%
+    # rename(~"Secret status in table_1", is_secret_1) %>% 
+    flextable() %>%
+    add_header_row(
+      top = TRUE, 
+      values = c("", "Secret status in table_1_alt"), 
+      colwidths = c(1, 2)
+    ) %>% 
+    bg(i = 1, j = 3, bg = "orange") %>% 
+    bg(i = 2, j = 2, bg = "orange") %>% 
+    theme_booktabs() %>%
+    autofit() %>%
+    htmltools_value()
+})
+```
+
+
+### Confusion matrix 2
+
+The confusion matrix below compares the final status (suppressed or not) of the common cells of
+`table_2` and `table_2_alt`.
+
+```{r}
+renderUI({
+  options(digits=1)
+  conf_matrices()[[2]] %>%
+    # rename(~"Secret status in table_2", is_secret_1) %>% 
+    flextable() %>%
+    add_header_row(
+      top = TRUE, 
+      values = c("", "Secret status in table_2_alt"), 
+      colwidths = c(1, 2)
+    ) %>% 
+    bg(i = 1, j = 3, bg = "orange") %>% 
+    bg(i = 2, j = 2, bg = "orange") %>% 
+    theme_booktabs() %>%
+    autofit() %>%
+    htmltools_value()
+})
+```
+
+
+### Confusion matrix 3
+
+The confusion matrix below compares the final status (suppressed or not) of the common cells of
+`table_1` and `table_2`.
+
+```{r}
+renderUI({
+  options(digits=1)
+  conf_matrices()[[3]] %>%
+    # rename(~"Secret status in table_1", is_secret_1) %>% 
+    flextable() %>%
+    add_header_row(
+      top = TRUE, 
+      values = c("", "Secret status in table_2"), 
+      colwidths = c(1, 2)
+    ) %>% 
+    bg(i = 1, j = 3, bg = "orange") %>% 
+    bg(i = 2, j = 2, bg = "orange") %>% 
+    theme_booktabs() %>%
+    autofit() %>%
+    htmltools_value()
+})
+```
+
