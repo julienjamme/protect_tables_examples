@@ -429,16 +429,14 @@ very easy to use in the case of big tables.
 
 ```{r}
 renderUI({
-  options(digits=1)
   summary_res() %>%
     select(-val_cells) %>% 
+    mutate(
+      across(all_of(c("pc_nb_cells", "pc_val_cells")), round, digits = 0)) %>% 
     flextable() %>%
-    colformat_int(
-      big.mark = " ",
-      na_str = "na") %>% 
     colformat_num(
-      j=4:5,big.mark = " ",dec.mark=".", digits = 2, na_str = "na"
-    ) %>% 
+      j=4:5, big.mark = " ", suffix = "%"
+    ) %>%
     theme_booktabs() %>%
     autofit() %>%
     htmltools_value()
@@ -497,7 +495,6 @@ The confusion matrix below compares the final status (suppressed or not) of the 
 
 ```{r}
 renderUI({
-  options(digits=1)
   conf_matrices()[[1]] %>%
     # rename(~"Secret status in table_1", is_secret_1) %>% 
     flextable() %>%
@@ -522,7 +519,6 @@ The confusion matrix below compares the final status (suppressed or not) of the 
 
 ```{r}
 renderUI({
-  options(digits=1)
   conf_matrices()[[2]] %>%
     # rename(~"Secret status in table_2", is_secret_1) %>% 
     flextable() %>%
@@ -547,7 +543,6 @@ The confusion matrix below compares the final status (suppressed or not) of the 
 
 ```{r}
 renderUI({
-  options(digits=1)
   conf_matrices()[[3]] %>%
     # rename(~"Secret status in table_1", is_secret_1) %>% 
     flextable() %>%
